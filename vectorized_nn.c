@@ -351,7 +351,7 @@ int main(int argc, char** argv)
     }
     else
     {
-        unsigned int layerHeights[4] = {28*28, 16, 16, 10};
+        unsigned int layerHeights[4] = {28*28, 32, 32, 10};
         netPtr = gen_neural_net(4, layerHeights);
         printf("Randomizing weights and biases...\n");
         randomize_network(netPtr);
@@ -360,7 +360,7 @@ int main(int argc, char** argv)
     printf("Done.\n");
 
     printf("Done. training...\n");
-    train(netPtr, tDataPtr, 10000, 200, 0.05f);
+    train(netPtr, tDataPtr, 10000, 10, 0.00025f);
     printf("Saving to disk as joj.network\n");
     save_network_to_disk(netPtr, "joj.network");
     printf("Done.\n");
