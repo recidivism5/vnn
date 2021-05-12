@@ -1,3 +1,10 @@
+/*
+This neural network implementation uses a slightly different backpropagation algorithm in which the dCdw's and dCdb's are summed over every training pair in each epoch
+and then at the end of the epoch are multiplied by the learning rate, divided by the number of training pairs in the batch and then subtracted from their associated weight/bias.
+For being more complicated, this algorithm seems also to be pretty bad in comparison to directly modifying the weights and biases on each round of forward+backward propagation, which is how
+vectorized_nn.c works.
+*/
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -185,7 +192,7 @@ float cost_function(NeuralNet* netPtr, float* expectedOutputBuffer)
         diff = netPtr->layers[last].activations[i] - expectedOutputBuffer[i];
         sum += diff * diff;
     }
-    return sum / netPtr->layers[last].numNodes;
+    return sum;
 }
 
 void reset_nudges(NeuralNet* netPtr)

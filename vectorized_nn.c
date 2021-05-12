@@ -160,7 +160,7 @@ float cost_function(NeuralNet* netPtr, float* expectedOutputBuffer)
         diff = netPtr->layers[last].activations[i] - expectedOutputBuffer[i];
         sum += diff * diff;
     }
-    return sum / netPtr->layers[last].numNodes;
+    return sum;
 }
 
 void train(NeuralNet* netPtr, TrainingData* tDataPtr, unsigned int batchSize, unsigned int numEpochs, float learningRate)
@@ -360,7 +360,7 @@ int main(int argc, char** argv)
     printf("Done.\n");
 
     printf("Done. training...\n");
-    train(netPtr, tDataPtr, 10000, 10, 0.025f);
+    train(netPtr, tDataPtr, 10000, 200, 0.05f);
     printf("Saving to disk as joj.network\n");
     save_network_to_disk(netPtr, "joj.network");
     printf("Done.\n");
