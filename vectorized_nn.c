@@ -40,6 +40,14 @@ typedef struct NeuralNet {
     unsigned int numLayers;
 } NeuralNet;
 
+typedef struct TrainingData {
+    float* inputData;
+    float* outputData;
+    unsigned int inputSize;
+    unsigned int outputSize;
+    unsigned int numPairs;
+} TrainingData;
+
 NeuralNet* gen_neural_net(unsigned int numLayers, unsigned int* layerHeights)
 {
     NeuralNet* netPtr = malloc(sizeof(NeuralNet));
@@ -55,6 +63,7 @@ NeuralNet* gen_neural_net(unsigned int numLayers, unsigned int* layerHeights)
 
         netPtr->layers[i].activations = malloc(layerHeights[i] * sizeof(float));
         netPtr->layers[i].biases = malloc(layerHeights[i] * sizeof(float));
+        netPtr->layers[i].dCdZs = malloc(layerHeights[i] * sizeof(float));
         netPtr->layers[i].weightMatrix = malloc(layerHeights[i] * layerHeights[i-1] * sizeof(float));
     }
     return netPtr;
@@ -66,7 +75,7 @@ void randomize_network(NeuralNet* netPtr)
     unsigned int j;
     unsigned int k;
 
-    for (i = 0; i < netPtr->numLayers; i++)
+    for (i = 1; i < netPtr->numLayers; i++)
     {
         for (j = 0; j < netPtr->layers[i].numNodes; j++)
         {
@@ -156,7 +165,7 @@ float cost_function(NeuralNet* netPtr, float* expectedOutputBuffer)
     return sum / netPtr->layers[last].numNodes;
 }
 
-void train(NeuralNet* netPtr, float* inputData, float* outputData, unsigned int numTrainingPairs, unsigned int batchSize, unsigned int numEpochs)
+void train(NeuralNet* netPtr, TrainingData* tDataPtr, unsigned int batchSize, unsigned int numEpochs)
 {
     unsigned int inputSize = netPtr->layers[0].numNodes;
     unsigned int outputSize = netPtr->layers[netPtr->numLayers - 1].numNodes;
@@ -170,18 +179,116 @@ void train(NeuralNet* netPtr, float* inputData, float* outputData, unsigned int 
         sumCost = 0.0f;
         for (tPair = 0; tPair < batchSize; tPair++)
         {
-            rIndex = random_uint(numTrainingPairs);
-            memcpy(netPtr->layers[0].activations, inputData + (rIndex * inputSize), inputSize * sizeof(float));
+            rIndex = random_uint(tDataPtr->numPairs);
+            memcpy(netPtr->layers[0].activations, tDataPtr->inputData + (rIndex * inputSize), inputSize * sizeof(float));
             propagate_forward(netPtr);
-            propagate_backward(netPtr, outputData + (rIndex * outputSize));
-            sumCost += cost_function(netPtr, outputData + (rIndex * outputSize));
+            propagate_backward(netPtr, tDataPtr->outputData + (rIndex * outputSize));
+            sumCost += cost_function(netPtr, tDataPtr->outputData + (rIndex * outputSize));
         }
-        printf("Epoch %u complete. avgCost = %f", epoch+1, sumCost / batchSize);
+        printf("Epoch %u complete. avgCost = %f\n", epoch+1, sumCost / batchSize);
     }
+}
+
+TrainingData* load_training_data(char* filePathInputs, char* filePathOutputs, unsigned int numPairs, unsigned int inputSize, unsigned int outputSize, unsigned int inputFileByteOffset, unsigned int outputFileByteOffset, char* inputType, char* outputType, char* outputMethod)
+{
+    TrainingData* tDataPtr = malloc(sizeof(TrainingData));
+    tDataPtr->numPairs = numPairs;
+    tDataPtr->inputSize = inputSize;
+    tDataPtr->inputData = malloc(numPairs * inputSize * sizeof(float));
+    tDataPtr->outputSize = outputSize;
+    tDataPtr->outputData = malloc(numPairs * outputSize * sizeof(float));
+
+    FILE* fptrI = fopen(filePathInputs, "rb");
+    fseek(fptrI, inputFileByteOffset, SEEK_SET);
+    FILE* fptrO = fopen(filePathOutputs, "rb");
+    fseek(fptrO, outputFileByteOffset, SEEK_SET);
+
+    unsigned int i;
+
+    if (!strcmp(inputType, "float"))        //First the inputs
+    {
+        fread(tDataPtr->inputData, numPairs * inputSize * sizeof(float), 1, fptrI);
+    }
+    else if (!strcmp(inputType, "char"))
+    {
+        for (i = 0; i < numPairs * inputSize; i++)
+        {
+            tDataPtr->inputData[i] = (float)(fgetc(fptrI)) / 255.0f;
+        }
+    }
+    else
+    {
+        printf("Error in load_training_data: Invalid inputType\n");
+        goto EXIT;
+    }
+
+    if (!strcmp(outputMethod, "highest-node"))
+    {
+        if (!strcmp(outputType, "char"))
+        {
+            for (i = 0; i < numPairs * outputSize; i++)
+            {
+                tDataPtr->outputData[i] = 0.0f;
+            }
+            for (i = 0; i < numPairs * outputSize; i += outputSize)
+            {
+                tDataPtr->outputData[i + fgetc(fptrO)] = 1.0f;
+            }
+        }
+    }
+    else
+    {
+        printf("Error in load_training_data: Invalid outputMethod\n");
+        goto EXIT;
+    }
+
+    fclose(fptrI);
+    fclose(fptrO);
+    return tDataPtr;
+    EXIT: {
+        fclose(fptrI);
+        fclose(fptrO);
+        exit(1);
+    }
+}
+
+void save_network_to_disk(NeuralNet* netPtr, char* filePath)
+{
+    FILE* fptr = fopen(filePath, "wb");
+    fwrite(&(netPtr->numLayers), sizeof(netPtr->numLayers), 1, fptr);
+    
+    unsigned int i;
+    unsigned int j;
+    unsigned int k;
+    
+    for (i = 0; i < netPtr->numLayers; i++)
+    {
+        fwrite(&(netPtr->layers[i].numNodes), sizeof(netPtr->layers[i].numNodes), 1, fptr);
+    }
+    for (i = 1; i < netPtr->numLayers; i++)
+    {
+        fwrite(netPtr->layers[i].biases, netPtr->layers[i].numNodes * sizeof(float), 1, fptr);
+        fwrite(netPtr->layers[i].weightMatrix, netPtr->layers[i].weightMatrixSize * sizeof(float), 1, fptr);
+    }
+    fclose(fptr);
 }
 
 int main(int argc, char** argv)
 {
     srand(time(NULL));
+    printf("Loading training data...\n");
+    TrainingData* tDataPtr = load_training_data("train-images.idx3-ubyte", "train-labels.idx1-ubyte", 60000, 28*28, 10, 16, 8, "char", "char", "highest-node");
+    printf("Done. Generating neural network...\n");
 
+    unsigned int layerHeights[4] = {28*28, 16, 16, 10};
+    NeuralNet* netPtr = gen_neural_net(4, layerHeights);
+
+    printf("Done. Randomizing weights an biases\n");
+
+    randomize_network(netPtr);
+    printf("Done. training...\n");
+    train(netPtr, tDataPtr, 10000, 21);
+    printf("Saving to disk as joj.network\n");
+    save_network_to_disk(netPtr, "joj.network");
+    printf("Done.\n");
 }
