@@ -273,6 +273,68 @@ void save_network_to_disk(NeuralNet* netPtr, char* filePath)
     fclose(fptr);
 }
 
+NeuralNet* load_network_from_disk(char* filePath)
+{
+    NeuralNet* netPtr = malloc(sizeof(NeuralNet));
+    FILE* fptr = fopen(filePath, "rb");
+    fread(&(netPtr->numLayers), sizeof(unsigned int), 1, fptr);
+    
+    unsigned int i;
+
+    for (i = 0; i < netPtr->numLayers; i++)
+    {
+        fread(&(netPtr->layers[i].numNodes), sizeof(unsigned int), 1, fptr);
+    }
+    for (i = 1; i < netPtr->numLayers; i++)
+    {
+        netPtr->layers[i].activations = malloc(netPtr->layers[i].numNodes * sizeof(float));
+        netPtr->layers[i].biases = malloc(netPtr->layers[i].numNodes * sizeof(float));
+        netPtr->layers[i].dCdZs = malloc(netPtr->layers[i].numNodes * sizeof(float));
+        netPtr->layers[i].weightMatrix = malloc(netPtr->layers[i].weightMatrixSize * sizeof(float));
+
+        fread(netPtr->layers[i].biases, netPtr->layers[i].numNodes * sizeof(float), 1, fptr);
+        fread(netPtr->layers[i].weightMatrix, netPtr->layers[i].weightMatrixSize * sizeof(float), 1, fptr);
+    }
+    fclose(fptr);
+    return netPtr;
+}
+
+void print_layer_activations(NeuralNet* netPtr, unsigned int layerNumber)
+{
+    unsigned int i;
+    for (i = 0; i < netPtr->layers[layerNumber].numNodes; i++)
+    {
+        printf("%f ", netPtr->layers[layerNumber].activations[i]);
+    }
+    putchar('\n');
+}
+
+void print_expected_output_buffer(TrainingData* tDataPtr, unsigned int startIndex)
+{
+    unsigned int j;
+    unsigned int outputIndex;
+    outputIndex = startIndex * tDataPtr->outputSize;
+    for (j = 0; j < tDataPtr->outputSize; j++)
+    {
+        printf("%f ", tDataPtr->outputData[outputIndex + j]);
+    }
+    putchar('\n');
+}
+
+void test_network(NeuralNet* netPtr, TrainingData* tDataPtr, unsigned int startIndex, unsigned int numCases)
+{
+    unsigned int i;
+    for (i = 0; i < numCases; i++)
+    {
+        memcpy(netPtr->layers[0].activations, tDataPtr->inputData + ((startIndex + i) * tDataPtr->inputSize), tDataPtr->inputSize * sizeof(float));
+        propagate_forward(netPtr);
+        printf("Output: ");
+        print_layer_activations(netPtr, netPtr->numLayers-1);
+        printf("Expect: ");
+        print_expected_output_buffer(tDataPtr, startIndex+i);
+    }
+}
+
 int main(int argc, char** argv)
 {
     srand(time(NULL));
@@ -287,8 +349,9 @@ int main(int argc, char** argv)
 
     randomize_network(netPtr);
     printf("Done. training...\n");
-    train(netPtr, tDataPtr, 10000, 21);
+    train(netPtr, tDataPtr, 10000, 11);
     printf("Saving to disk as joj.network\n");
     save_network_to_disk(netPtr, "joj.network");
     printf("Done.\n");
+    test_network(netPtr, tDataPtr, 0, 50);
 }
