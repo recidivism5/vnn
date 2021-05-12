@@ -158,7 +158,7 @@ float cost_function(NeuralNet* netPtr, float* expectedOutputBuffer)
     for (i = 0; i < netPtr->layers[last].numNodes; i++)
     {
         diff = netPtr->layers[last].activations[i] - expectedOutputBuffer[i];
-        sum += diff;
+        sum += diff * diff;
     }
     return sum / netPtr->layers[last].numNodes;
 }

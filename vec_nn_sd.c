@@ -406,7 +406,7 @@ int main(int argc, char** argv)
     printf("Done.\n");
 
     printf("training...\n");
-    train(netPtr, tDataPtr, 10000, 100, 0.05f);
+    train(netPtr, tDataPtr, 10000, 100, 1.25f);
     printf("Saving to disk as joj.network\n");
     save_network_to_disk(netPtr, "joj.network");
     printf("Done.\n");
