@@ -342,27 +342,61 @@ int main(int argc, char** argv)
     srand(time(NULL));
     printf("Loading training data...\n");
     TrainingData* tDataPtr = load_training_data("train-images.idx3-ubyte", "train-labels.idx1-ubyte", 60000, 28*28, 10, 16, 8, "char", "char", "highest-node");
-    printf("Done. Generating neural network...\n");
+    printf("Done.\n");
 
     NeuralNet* netPtr;
     if (argc > 1)
     {
+        printf("Loading %s\n", argv[1]);
         netPtr = load_network_from_disk(argv[1]);
+        printf("Done.\n");
     }
     else
     {
-        unsigned int layerHeights[4] = {28*28, 32, 32, 10};
-        netPtr = gen_neural_net(4, layerHeights);
+        printf("Generating new neural network with default settings...\n");
+        unsigned int layerHeights[] = {28*28, 64, 64, 64, 10};
+        netPtr = gen_neural_net(5, layerHeights);
         printf("Randomizing weights and biases...\n");
         randomize_network(netPtr);
+        printf("Done.\n");
+        printf("Save .network file as? ");
+        char outName[30];
+        scanf("%s", outName);
+        strcat(outName, ".network");
+        save_network_to_disk(netPtr, outName);
+        return 0;
     }
 
-    printf("Done.\n");
+    if (argc < 5)
+    {
+        printf("Useage: ./vectorized_nn <*.network> <-train / -test> <numEpochs / trainingStartIndex> <learningRate / numTrainingPairs>\n");
+        return 0;
+    }
 
-    printf("Done. training...\n");
-    train(netPtr, tDataPtr, 10000, 10, 0.00025f);
-    printf("Saving to disk as joj.network\n");
-    save_network_to_disk(netPtr, "joj.network");
-    printf("Done.\n");
-    test_network(netPtr, tDataPtr, 0, 50);
+    if (!strcmp(argv[2], "-train"))
+    {
+        unsigned int epochCount;
+        float trainingRate;
+        sscanf(argv[3], "%u", &epochCount);
+        sscanf(argv[4], "%f", &trainingRate);
+        printf("Training network for %u epochs with trainingRate = %f\n", epochCount, trainingRate);
+        train(netPtr, tDataPtr, 10000, epochCount, trainingRate);
+        printf("Training complete.\n");
+        printf("Save .network file as? ");
+        char outName[30];
+        scanf("%s", outName);
+        strcat(outName, ".network");
+        save_network_to_disk(netPtr, outName);
+        return 0;
+    }
+    else if (!strcmp(argv[2], "-test"))
+    {
+        unsigned int startIndex;
+        unsigned int pairCount;
+        sscanf(argv[3], "%u", &startIndex);
+        sscanf(argv[4], "%u", &pairCount);
+        printf("Testing network on pair %u through %u\n", startIndex, startIndex + pairCount);
+        test_network(netPtr, tDataPtr, startIndex, pairCount);
+        return 0;
+    }
 }
