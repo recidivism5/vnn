@@ -7,5 +7,7 @@ command format:
 
 ./vectorized_nn.exe <*.network> <-train / -test> <numEpochs / testDataStartIndex> <learningRate / numTestingPairs>
 
+running ./vectorized_nn.exe without arguments will generate a new neural network description with default settings and then prompt you to for a file name to save it under.
+
 
 Apart from that, I also have vec_nn_ad.c which is the vectorized neural network generator/trainer, except it implements a slightly altered backpropagation routine which is described in a comment at the top of its source code.
