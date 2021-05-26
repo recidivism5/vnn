@@ -354,8 +354,8 @@ int main(int argc, char** argv)
     else
     {
         printf("Generating new neural network with default settings...\n");
-        unsigned int layerHeights[] = {28*28, 64, 64, 64, 10};
-        netPtr = gen_neural_net(5, layerHeights);
+        unsigned int layerHeights[] = {28*28, 16, 16, 10};
+        netPtr = gen_neural_net(4, layerHeights);
         printf("Randomizing weights and biases...\n");
         randomize_network(netPtr);
         printf("Done.\n");
@@ -396,6 +396,8 @@ int main(int argc, char** argv)
         sscanf(argv[3], "%u", &startIndex);
         sscanf(argv[4], "%u", &pairCount);
         printf("Testing network on pair %u through %u\n", startIndex, startIndex + pairCount);
+        free(tDataPtr);
+        tDataPtr = load_training_data("t10k-images.idx3-ubyte", "t10k-labels.idx1-ubyte", 10000, 28*28, 10, 16, 8, "char", "char", "highest-node");
         test_network(netPtr, tDataPtr, startIndex, pairCount);
         return 0;
     }
