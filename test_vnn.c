@@ -1,10 +1,3 @@
-/*
-This neural network implementation uses a slightly different backpropagation algorithm in which the dCdw's and dCdb's are summed over every training pair in each epoch
-and then at the end of the epoch are multiplied by the learning rate, divided by the number of training pairs in the batch and then subtracted from their associated weight/bias.
-For being more complicated, this algorithm seems also to be pretty bad in comparison to directly modifying the weights and biases on each round of forward+backward propagation, which is how
-vectorized_nn.c works.
-*/
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -35,9 +28,7 @@ typedef struct Layer {
     unsigned int numNodes;
     float* activations;
     float* biases;
-    float* biasNudges;
     float* weightMatrix;
-    float* weightNudges;
     unsigned int weightMatrixSize;
     float* dCdZs;
 } Layer;
@@ -70,10 +61,8 @@ NeuralNet* gen_neural_net(unsigned int numLayers, unsigned int* layerHeights)
 
         netPtr->layers[i].activations = malloc(layerHeights[i] * sizeof(float));
         netPtr->layers[i].biases = malloc(layerHeights[i] * sizeof(float));
-        netPtr->layers[i].biasNudges = malloc(layerHeights[i] * sizeof(float));
         netPtr->layers[i].dCdZs = malloc(layerHeights[i] * sizeof(float));
         netPtr->layers[i].weightMatrix = malloc(layerHeights[i] * layerHeights[i-1] * sizeof(float));
-        netPtr->layers[i].weightNudges = malloc(layerHeights[i] * layerHeights[i-1] * sizeof(float));
     }
     return netPtr;
 }
@@ -118,7 +107,7 @@ void propagate_forward(NeuralNet* netPtr)
     }
 }
 
-void propagate_backward(NeuralNet* netPtr, float* expectedOutputBuffer)
+void propagate_backward(NeuralNet* netPtr, float* expectedOutputBuffer, float learningRate)
 {
     unsigned int i;
     unsigned int j;
@@ -130,7 +119,7 @@ void propagate_backward(NeuralNet* netPtr, float* expectedOutputBuffer)
     last = netPtr->numLayers - 1;
     for (i = 0; i < netPtr->layers[last].numNodes; i++)     //get dCdZs for output layer
     {
-        netPtr->layers[last].dCdZs[i] = 2 * (netPtr->layers[last].activations[i] - expectedOutputBuffer[i]) * fast_sigmoid_derivative(netPtr->layers[last].activations[i]);
+        netPtr->layers[last].dCdZs[i] = 2 * (netPtr->layers[last].activations[i] - expectedOutputBuffer[i]) * fast_sigmoid_derivative(netPtr->layers[last].activations[i]) / netPtr->layers[last].numNodes;
     }
 
     for (i = last - 1; i > 0; i--)      //now get dCdZs for hidden layers
@@ -146,36 +135,15 @@ void propagate_backward(NeuralNet* netPtr, float* expectedOutputBuffer)
         }
     }
 
-    for (i = last; i > 0; i--)      //now calculate and add deltas to biasNudges and weightNudges
+    for (i = last; i > 0; i--)      //now calculate and apply changes to each weight and bias
     {
         for (j = 0; j < netPtr->layers[i].numNodes; j++)
         {
             for (k = 0; k < netPtr->layers[i-1].numNodes; k++)
             {
-                netPtr->layers[i].weightNudges[j * netPtr->layers[i-1].numNodes + k] += netPtr->layers[i].dCdZs[j] * netPtr->layers[i-1].activations[k];
+                netPtr->layers[i].weightMatrix[j * netPtr->layers[i-1].numNodes + k] -= netPtr->layers[i].dCdZs[j] * netPtr->layers[i-1].activations[k] * learningRate;
             }
-            netPtr->layers[i].biasNudges[j] += netPtr->layers[i].dCdZs[j];
-        }
-    }
-}
-
-float apply_nudges(NeuralNet* netPtr, float learningRate, unsigned int batchSize)
-{
-    unsigned int i;
-    unsigned int j;
-    unsigned int k;
-
-    unsigned int last = netPtr->numLayers-1;
-
-    for (i = last; i > 0; i--)
-    {
-        for (k = 0; k < netPtr->layers[i].weightMatrixSize; k++)
-        {
-            netPtr->layers[i].weightMatrix[k] -= netPtr->layers[i].weightNudges[k] * learningRate / (float)batchSize;
-        }
-        for (j = 0; j < netPtr->layers[i].numNodes; j++)
-        {
-            netPtr->layers[i].biases[j] -= netPtr->layers[i].biasNudges[j] * learningRate / (float)batchSize;
+            netPtr->layers[i].biases[j] -= netPtr->layers[i].dCdZs[j] * learningRate;
         }
     }
 }
@@ -195,23 +163,6 @@ float cost_function(NeuralNet* netPtr, float* expectedOutputBuffer)
     return sum;
 }
 
-void reset_nudges(NeuralNet* netPtr)
-{
-    unsigned int i;
-    unsigned int j;
-    for (i = 1; i < netPtr->numLayers; i++)
-    {
-        for (j = 0; j < netPtr->layers[i].numNodes; j++)
-        {
-            netPtr->layers[i].biasNudges[j] = 0.0f;
-        }
-        for (j = 0; j < netPtr->layers[i].weightMatrixSize; j++)
-        {
-            netPtr->layers[i].weightNudges[j] = 0.0f;
-        }
-    }
-}
-
 void train(NeuralNet* netPtr, TrainingData* tDataPtr, unsigned int batchSize, unsigned int numEpochs, float learningRate)
 {
     unsigned int inputSize = netPtr->layers[0].numNodes;
@@ -224,16 +175,14 @@ void train(NeuralNet* netPtr, TrainingData* tDataPtr, unsigned int batchSize, un
     for (epoch = 0; epoch < numEpochs; epoch++)
     {
         sumCost = 0.0f;
-        reset_nudges(netPtr);
         for (tPair = 0; tPair < batchSize; tPair++)
         {
             rIndex = random_uint(tDataPtr->numPairs);
             memcpy(netPtr->layers[0].activations, tDataPtr->inputData + (rIndex * inputSize), inputSize * sizeof(float));
             propagate_forward(netPtr);
-            propagate_backward(netPtr, tDataPtr->outputData + (rIndex * outputSize));
+            propagate_backward(netPtr, tDataPtr->outputData + (rIndex * outputSize), learningRate);
             sumCost += cost_function(netPtr, tDataPtr->outputData + (rIndex * outputSize));
         }
-        apply_nudges(netPtr, learningRate, batchSize);
         printf("Epoch %u complete. avgCost = %f\n", epoch+1, sumCost / batchSize);
     }
 }
@@ -342,10 +291,8 @@ NeuralNet* load_network_from_disk(char* filePath)
         netPtr->layers[i].weightMatrixSize = netPtr->layers[i].numNodes * netPtr->layers[i-1].numNodes;
         netPtr->layers[i].activations = malloc(netPtr->layers[i].numNodes * sizeof(float));
         netPtr->layers[i].biases = malloc(netPtr->layers[i].numNodes * sizeof(float));
-        netPtr->layers[i].biasNudges = malloc(netPtr->layers[i].numNodes * sizeof(float));
         netPtr->layers[i].dCdZs = malloc(netPtr->layers[i].numNodes * sizeof(float));
         netPtr->layers[i].weightMatrix = malloc(netPtr->layers[i].weightMatrixSize * sizeof(float));
-        netPtr->layers[i].weightNudges = malloc(netPtr->layers[i].weightMatrixSize * sizeof(float));
 
         fread(netPtr->layers[i].biases, netPtr->layers[i].numNodes * sizeof(float), 1, fptr);
         fread(netPtr->layers[i].weightMatrix, netPtr->layers[i].weightMatrixSize * sizeof(float), 1, fptr);
@@ -395,27 +342,63 @@ int main(int argc, char** argv)
     srand(time(NULL));
     printf("Loading training data...\n");
     TrainingData* tDataPtr = load_training_data("train-images.idx3-ubyte", "train-labels.idx1-ubyte", 60000, 28*28, 10, 16, 8, "char", "char", "highest-node");
-    printf("Done. Generating neural network...\n");
+    printf("Done.\n");
 
     NeuralNet* netPtr;
     if (argc > 1)
     {
+        printf("Loading %s\n", argv[1]);
         netPtr = load_network_from_disk(argv[1]);
+        printf("Done.\n");
     }
     else
     {
-        unsigned int layerHeights[4] = {28*28, 16, 16, 10};
+        printf("Generating new neural network with default settings...\n");
+        unsigned int layerHeights[] = {28*28, 16, 16, 10};
         netPtr = gen_neural_net(4, layerHeights);
         printf("Randomizing weights and biases...\n");
         randomize_network(netPtr);
+        printf("Done.\n");
+        printf("Save .network file as? ");
+        char outName[30];
+        scanf("%s", outName);
+        strcat(outName, ".network");
+        save_network_to_disk(netPtr, outName);
+        return 0;
     }
 
-    printf("Done.\n");
+    if (argc < 5)
+    {
+        printf("Useage: ./vectorized_nn <*.network> <-train / -test> <numEpochs / trainingStartIndex> <learningRate / numTrainingPairs>\n");
+        return 0;
+    }
 
-    printf("training...\n");
-    train(netPtr, tDataPtr, 10000, 100, 0.0006f);
-    printf("Saving to disk as joj.network\n");
-    save_network_to_disk(netPtr, "joj.network");
-    printf("Done.\n");
-    test_network(netPtr, tDataPtr, 0, 50);
+    if (!strcmp(argv[2], "-train"))
+    {
+        unsigned int epochCount;
+        float trainingRate;
+        sscanf(argv[3], "%u", &epochCount);
+        sscanf(argv[4], "%f", &trainingRate);
+        printf("Training network for %u epochs with trainingRate = %f\n", epochCount, trainingRate);
+        train(netPtr, tDataPtr, 10000, epochCount, trainingRate);
+        printf("Training complete.\n");
+        printf("Save .network file as? ");
+        char outName[30];
+        scanf("%s", outName);
+        strcat(outName, ".network");
+        save_network_to_disk(netPtr, outName);
+        return 0;
+    }
+    else if (!strcmp(argv[2], "-test"))
+    {
+        unsigned int startIndex;
+        unsigned int pairCount;
+        sscanf(argv[3], "%u", &startIndex);
+        sscanf(argv[4], "%u", &pairCount);
+        printf("Testing network on pair %u through %u\n", startIndex, startIndex + pairCount);
+        free(tDataPtr);
+        tDataPtr = load_training_data("t10k-images.idx3-ubyte", "t10k-labels.idx1-ubyte", 10000, 28*28, 10, 16, 8, "char", "char", "highest-node");
+        test_network(netPtr, tDataPtr, startIndex, pairCount);
+        return 0;
+    }
 }
