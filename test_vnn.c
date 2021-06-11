@@ -78,10 +78,10 @@ void randomize_network(NeuralNet* netPtr)
         for (j = 0; j < netPtr->layers[i].numNodes; j++)
         {
             netPtr->layers[i].biases[j] = random_float(-1.0f, 1.0f);
-            for (k = 0; k < netPtr->layers[i].weightMatrixSize; k++)
-            {
-                netPtr->layers[i].weightMatrix[k] = random_float(-1.0f, 1.0f);
-            }
+        }
+        for (k = 0; k < netPtr->layers[i].weightMatrixSize; k++)
+        {
+            netPtr->layers[i].weightMatrix[k] = random_float(-1.0f, 1.0f);
         }
     }
 }
@@ -160,7 +160,7 @@ float cost_function(NeuralNet* netPtr, float* expectedOutputBuffer)
         diff = netPtr->layers[last].activations[i] - expectedOutputBuffer[i];
         sum += diff * diff;
     }
-    return sum;
+    return sum / (netPtr->layers[last].numNodes);
 }
 
 void train(NeuralNet* netPtr, TrainingData* tDataPtr, unsigned int batchSize, unsigned int numEpochs, float learningRate)

@@ -4,6 +4,12 @@
 #include <string.h>
 #include <time.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 float fast_sigmoid(float x)
 {
     return 1.0f / (1.0f + expf(-x));
